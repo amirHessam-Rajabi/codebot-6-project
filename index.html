@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>کدبات ۶ — رقم را بکش، شبکه‌ی عصبی حدس می‌زند</title>
+<meta name="description" content="پروژه‌ی یادگیری ماشین: یک شبکه‌ی عصبی چندلایه که ارقام دست‌نویس را در همان مرورگر شما، بدون هیچ سروری، تشخیص می‌دهد.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="bgNet" aria-hidden="true"></canvas>
+<div class="floating-digits" aria-hidden="true">
+  <span style="--d:1">0</span><span style="--d:2">1</span><span style="--d:3">7</span>
+  <span style="--d:4">4</span><span style="--d:5">9</span><span style="--d:6">3</span>
+  <span style="--d:7">8</span><span style="--d:8">2</span><span style="--d:9">6</span>
+</div>
+
+<div class="pin-badge" aria-hidden="false">
+  <span class="pin-dot"></span>
+  پروژه کدبات ۶ — امیرحسام رجبی
+</div>
+
+<main>
+
+  <!-- ===== HERO / INTERACTIVE DEMO ===== -->
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow-free">
+        <span class="status-chip"><span class="status-dot"></span> مدل در مرورگر شما بارگذاری و آماده است</span>
+      </p>
+      <h1>یک رقم بکش،<br><span class="grad-text">مغز مصنوعی</span> حدسش می‌زند</h1>
+      <p class="lead">
+        زیر همین چند خط، یک شبکه‌ی عصبی چندلایه (MLP) واقعی نشسته که از صفر آموزش دیده.
+        هر ضربه‌ی قلم شما را به ۷۸۴ عدد تبدیل می‌کند، از دل چند لایه از نورون‌ها رد می‌کند و در کسری از ثانیه حدس می‌زند چه رقمی نوشتید — کاملاً روی سیستم خودتان، بدون اتصال به هیچ سروری.
+      </p>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="panel draw-panel">
+        <div class="panel-head">
+          <h2>۱. اینجا بکش</h2>
+          <button id="clearBtn" class="ghost-btn" type="button">پاک کردن</button>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="drawCanvas" width="280" height="280" aria-label="بوم کشیدن رقم"></canvas>
+          <p class="canvas-hint" id="canvasHint">با موس یا انگشت، یک رقم بین ۰ تا ۹ بکش</p>
+        </div>
+      </div>
+
+      <div class="panel grid-panel">
+        <div class="panel-head">
+          <h2>۲. دید کامپیوتر</h2>
+          <span class="tiny-note">۲۸ در ۲۸ پیکسل</span>
+        </div>
+        <div class="pixel-grid-wrap">
+          <canvas id="pixelCanvas" width="140" height="140" aria-label="نسخه‌ی ۲۸ در ۲۸ پیکسلی رقم"></canvas>
+        </div>
+      </div>
+
+      <div class="panel predict-panel">
+        <div class="panel-head">
+          <h2>۳. حدس مدل</h2>
+          <span class="tiny-note" id="confidenceNote">—</span>
+        </div>
+        <div class="big-digit-wrap">
+          <span id="bigDigit" class="big-digit">؟</span>
+        </div>
+        <div class="bars" id="bars"></div>
+      </div>
+    </div>
+
+    <div class="panel network-panel">
+      <div class="panel-head">
+        <h2>۴. داخل شبکه چه می‌گذرد</h2>
+        <span class="tiny-note">مسیر روشن = مسیر واقعیِ تصمیم مدل</span>
+      </div>
+      <svg id="netSvg" viewBox="0 0 1000 320" preserveAspectRatio="xMidYMid meet" aria-label="نمودار زنده‌ی شبکه‌ی عصبی"></svg>
+      <div class="net-legend">
+        <span><i class="dot dot-in"></i> ورودی: همان تصویر ۲۸×۲۸ شما</span>
+        <span><i class="dot dot-h"></i> دو لایه‌ی پنهان (خلاصه‌شده)</span>
+        <span><i class="dot dot-out"></i> خروجی: احتمال هر رقم</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== HOW IT WORKS / NOTEBOOK LOGIC ===== -->
+  <section class="section" id="how">
+    <h2 class="section-title">پشت صحنه: مدل چطور آموزش دید؟</h2>
+    <p class="section-sub">
+      این وب‌سایت برداشتی زنده و مرورگرمحور از یک پروژه‌ی یادگیری ماشینِ کلاسیک روی دیتاست ارقام دست‌نویس است.
+      مراحل زیر همان مسیری‌ست که مدل، پیش از رسیدن به این صفحه، طی کرده.
+    </p>
+
+    <ol class="steps">
+      <li>
+        <span class="step-no">۱</span>
+        <div>
+          <h3>آماده‌سازی داده</h3>
+          <p>هزاران تصویر رقم دست‌نویس (هرکدام ۲۸×۲۸ پیکسل) به همراه برچسب واقعی‌شان جمع می‌شوند و مقدار روشنایی هر پیکسل بین ۰ و ۱ نرمالایز می‌شود.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-no">۲</span>
+        <div>
+          <h3>تقسیم آموزش/تست</h3>
+          <p>داده‌ها با نسبتی نزدیک به ۸۵ به ۱۵ به دو بخش آموزش و تست تقسیم می‌شوند تا بشود دقت مدل را روی نمونه‌هایی که ندیده، سنجید.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-no">۳</span>
+        <div>
+          <h3>آموزش مدل پیش‌فرض</h3>
+          <p>یک <code>MLPClassifier</code> (شبکه‌ی عصبی چندلایه‌ی پرسپترون) با تنظیمات ساده آموزش داده می‌شود تا یک خط پایه برای مقایسه داشته باشیم.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-no">۴</span>
+        <div>
+          <h3>جست‌وجوی بهترین پارامترها</h3>
+          <p>با <code>GridSearchCV</code> ترکیب‌های مختلف تعداد نورون‌های لایه‌ی پنهان و تابع فعال‌سازی امتحان می‌شود تا دقیق‌ترین ترکیب پیدا شود.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-no">۵</span>
+        <div>
+          <h3>مقایسه‌ی دقت</h3>
+          <p>دقت مدل پیش‌فرض و مدل بهینه‌شده کنار هم سنجیده می‌شوند تا اثر تنظیم پارامترها به چشم بیاید.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-no">۶</span>
+        <div>
+          <h3>وزن‌ها، آماده برای مرورگر</h3>
+          <p>در نسخه‌ی این سایت، وزن‌های همان مدل آموزش‌دیده در یک فایل کوچک ذخیره شده و مستقیم با جاوااسکریپت خالص اجرا می‌شود — دقیقاً همان ضرب ماتریسی و توابع فعال‌سازی، بدون نیاز به پایتون یا سرور.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===== MODEL CARD ===== -->
+  <section class="section model-card" id="model">
+    <h2 class="section-title">مشخصات مدل</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <span class="stat-value">۷۸۴ ← ۱۶۰ ← ۸۰ ← ۱۰</span>
+        <span class="stat-label">معماری لایه‌ها</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">ReLU + Softmax</span>
+        <span class="stat-label">توابع فعال‌سازی</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="accStat">—</span>
+        <span class="stat-label">دقت روی داده‌ی آزمایشی</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">~۱۳۹,۰۰۰</span>
+        <span class="stat-label">پارامتر قابل آموزش</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p>ساخته‌شده با HTML، CSS و جاوااسکریپت خالص — بدون هیچ فریم‌ورک یا وابستگی بیرونی برای اجرای مدل.</p>
+    <p class="footer-pin">پروژه کدبات ۶ — امیرحسام رجبی</p>
+  </footer>
+
+</main>
+
+<script src="assets/model.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
